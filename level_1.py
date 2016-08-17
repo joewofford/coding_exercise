@@ -1,10 +1,12 @@
 import requests
 import random
 import time
+import websocket
 from bs4 import BeautifulSoup
 
 
-AUTH = {'X-Starfighter-Authorization': '0d3cdd0cbdc4edb85093ec741b87a58f12d467a8'}
+
+AUTH = {'X-Starfighter-Authorization': '72d41755aa7d45c4010a5e182e4f0ba543670fb1'}
 
 def check_venue(venue):
     '''
@@ -141,8 +143,26 @@ def block_buy(account, ticker, qty, order_type='market', max_qty=1000):
 
     return 'Well, that happened...'
 
+def block_buy_b(account, ticker, qty, order_type='?????', max_qty=1000, conn_in, conn_out):
 
-def parse_target_price()
+
+
+def est_ticker(account, venue, ticker, qty, conn_in, conn_out):
+    url = 'wss://api.stockfighter.io/ob/api/ws/{}/venues/{}/tickertape/stocks/{}'.format(account, venue, ticker)
+    while conn_in.recv() < qty:
+        print 'conn_in seemed to work, inside the while loop'
+        try:
+            quote = ws.recv()
+            print quote
+            conn_out.send(qoute)
+        except:
+            print 'Connecting ticker...'
+            ws = websocket.create_connection(url, timeout=600)
+    ws.close()
+    return
+
+
+#def parse_target_price():
 
 
 

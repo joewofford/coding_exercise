@@ -2,7 +2,7 @@ import requests
 import random
 import time
 
-AUTH = {'X-Starfighter-Authorization': '0d3cdd0cbdc4edb85093ec741b87a58f12d467a8'}
+AUTH = {'X-Starfighter-Authorization': '72d41755aa7d45c4010a5e182e4f0ba543670fb1'}
 
 class BlockTrade(object):
 
