@@ -143,26 +143,26 @@ def block_buy(account, ticker, qty, order_type='market', max_qty=1000):
 
     return 'Well, that happened...'
 
-def block_buy_b(account, venue, ticker, qty, order_type='?????', max_qty=1000, target_price, conn_in, conn_out):
-    agg_bought = 0
+# def block_buy_b(account, venue, ticker, qty, order_type='?????', max_qty=1000, target_price, conn_in, conn_out):
+#     agg_bought = 0
+#
+#     while qty > 0:
 
-    while qty > 0:
 
 
-
-def est_ticker(account, venue, ticker, qty, conn_in, conn_out):
-    url = 'wss://api.stockfighter.io/ob/api/ws/{}/venues/{}/tickertape/stocks/{}'.format(account, venue, ticker)
-    while conn_in.recv() < qty:
-        print 'conn_in seemed to work, inside the while loop'
-        try:
-            quote = ws.recv()
-            print quote
-            conn_out.send(qoute)
-        except:
-            print 'Connecting ticker...'
-            ws = websocket.create_connection(url, timeout=600)
-    ws.close()
-    return
+# def est_ticker(account, venue, ticker, qty, conn_in, conn_out):
+#     url = 'wss://api.stockfighter.io/ob/api/ws/{}/venues/{}/tickertape/stocks/{}'.format(account, venue, ticker)
+#     while conn_in.recv() < qty:
+#         print 'conn_in seemed to work, inside the while loop'
+#         try:
+#             quote = ws.recv()
+#             print quote
+#             conn_out.send(qoute)
+#         except:
+#             print 'Connecting ticker...'
+#             ws = websocket.create_connection(url, timeout=600)
+#     ws.close()
+#     return
 
 
 #def parse_target_price():
