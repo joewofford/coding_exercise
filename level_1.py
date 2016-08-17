@@ -143,7 +143,10 @@ def block_buy(account, ticker, qty, order_type='market', max_qty=1000):
 
     return 'Well, that happened...'
 
-def block_buy_b(account, ticker, qty, order_type='?????', max_qty=1000, conn_in, conn_out):
+def block_buy_b(account, venue, ticker, qty, order_type='?????', max_qty=1000, target_price, conn_in, conn_out):
+    agg_bought = 0
+
+    while qty > 0:
 
 
 
