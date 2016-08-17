@@ -1,1 +1,4 @@
-# coding_exercise
+# Coding Exercise
+By Joe Wofford
+
+Re: Mickey Shaughnessy
