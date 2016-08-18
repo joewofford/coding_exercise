@@ -9,7 +9,11 @@ from threading import Thread
 from bs4 import BeautifulSoup
 from selenium import webdriver
 
-AUTH = {'X-Starfighter-Authorization': '72d41755aa7d45c4010a5e182e4f0ba543670fb1'}
+AUTH = {'X-Starfighter-Authorization': '7f1b969336002cf5f1dbf584276fa81b0f13880f'}
+
+USERNAME = 'joewofford'
+PS = '????????????????'
+PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 class Account(object):
 
@@ -84,13 +88,25 @@ class Account(object):
     def _get_target_price(self):
 
 
+    def _login(self):
+        url = 'https://www.stockfighter.io'
+        b_chrome = webdriver.Chrome(executable_path = PATH_TO_CHROMEDRIVER)
+        b_chrome.get(url)
+        b_chrome.find_elements_by_name('session[username]')[0].send_keys(USERNAME)
+        b_chrom.find_elements_by_name('session[password]')[0].send_keys(PS)
+        browser.find_elements_by_xpath('//*[@id="loginform"]/button')[0].click()
 
-def _parse_target_price():
 
-    url="https://www.stockfighter.io/ui/play/blotter#chock_a_block"
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, 'html.parser')
-    price_string = re.compile()
-    soup.search(string="Update from the back office: you've purchased 1678 shares at an average cost of $87.69. The client's target price is $82.10.")
 
-    price_string = soup.find_all(re.compile('The client\'s target price is \$(\d*\.\d*)\."'))
+
+# def _parse_target_price():
+#
+#     url="https://www.stockfighter.io/ui/play/blotter#chock_a_block"
+#     r = requests.get(url)
+#     soup = BeautifulSoup(r.text, 'html.parser')
+#     price_string = re.compile()
+#     soup.search(string="Update from the back office: you've purchased 1678 shares at an average cost of $87.69. The client's target price is $82.10.")
+#
+#     price_string = soup.find_all(re.compile('The client\'s target price is \$(\d*\.\d*)\."'))
+#
+#     WILL NOT WORK USING REQUESTS BECAUSE JAVASCRIPT RENDERING...
