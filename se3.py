@@ -31,8 +31,8 @@ def pipe_test(account, venue, ticker):
 
 if __name__ == '__main__':
 
-    account = 'OFB36823187'
-    venue = 'RYWEX'
-    ticker = 'HFS'
+    account = 'SFB58608883'
+    venue = 'WDBTEX'
+    ticker = 'YLVO'
 
     pipe_test(account, venue, ticker)
