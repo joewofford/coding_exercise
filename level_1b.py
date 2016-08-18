@@ -17,8 +17,8 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 class Account(object):
 
-    def __init__(self, account):
-        self.account = account
+    def __init__(self):
+        return
 
 
     def block_buy(ticker, qty, max_qty=1000, owned=0):
@@ -95,6 +95,17 @@ class Account(object):
         b_chrome.find_elements_by_name('session[username]')[0].send_keys(USERNAME)
         b_chrom.find_elements_by_name('session[password]')[0].send_keys(PS)
         browser.find_elements_by_xpath('//*[@id="loginform"]/button')[0].click()
+        return
+
+
+    def _initiate_market(self):
+        browser.find_elements_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]')[0].click()
+        browser.find_elements_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[1]/a/span[1]/b')[0].click()
+        return
+
+
+    def _parse_trade_info(self):
+        self.account = browser.find_elements_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[2]/strong[2]')[0].text.split()[1]
 
 
 
