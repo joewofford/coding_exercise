@@ -171,8 +171,8 @@ def block_buy(account, ticker, qty, order_type='market', max_qty=1000):
 
 
 if __name__ == '__main__':
-    account = 'EBS60407410'
-    ticker = 'ARB'
+    account = 'TAA69060633'
+    ticker = 'VVOU'
     qty = 100000
     #call = get_tickers('TESTEX')
     #venue = get_venue('FOOBAR')

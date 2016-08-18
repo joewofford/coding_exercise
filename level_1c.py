@@ -20,14 +20,21 @@ class Account(object):
     def __init__(self):
         return
 
-
     def block_buy(qty=100000, max_qty=1000, owned=0):
         self.qty = qty
         self.max_qty = max_qty
         self.owned = owned
-        self.order_type = '????????????????????????????????????????????????'
 
+        self._login()
+        self._initiate_market()
+        self._parse_trade_info()
+        self._get_venue()
 
+        q = Queue.Queue()
+        self._launch_tickertape(q)
+        time.sleep(60)
+
+    def
 
     def _get_tickers(self, venue):
         call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks'.format(venue), headers=AUTH)
@@ -40,17 +47,16 @@ class Account(object):
         for venue in venues:
             if self.ticker in get_tickers(venue):
                 self.venue = venue
-                return True
-        return False
+                return
 
-    def _single_buy(self, qty):
+    def _single_buy(self, qty, order_type):
         order = {
         'account': self.account,
         'venue': self.venue,
         'stock': self.ticker,
         'qty': qty,
         'direction': 'buy',
-        'orderType': self.order_type
+        'orderType': order_type
         }
 
         call = requests.post('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders'.format(self.venue, self.ticker), headers=AUTH, json=order)
@@ -84,21 +90,27 @@ class Account(object):
         b_chrome.find_elements_by_name('session[username]')[0].send_keys(USERNAME)
         b_chrom.find_elements_by_name('session[password]')[0].send_keys(PS)
         b_chrom.find_elements_by_xpath('//*[@id="loginform"]/button')[0].click()
+        time.sleep(30)
         return
 
     def _initiate_market(self):
         b_chrom.find_elements_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]')[0].click()
         b_chrom.find_elements_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[1]/a/span[1]/b')[0].click()
+        time.sleep(30)
         return
 
     def _parse_trade_info(self):
         self.account = b_chrom.find_elements_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[2]/strong[2]')[0].text.split()[1]
         self.ticker = b_chrom.find_elements_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[2]/em')[0].text
+        time.sleep(5)
         return
 
     def _parse_target_price(self):
         self.target_price = float(b_chrom.find_element_by_xpath('//*[@id="wrapping"]/div/div[1]/div/div[1]/p').text.split('$')[-1][:-1])
         return
+
+    def _extract_target_price(self):
+
 
 
 
