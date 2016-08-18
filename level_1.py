@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 
 
-AUTH = {'X-Starfighter-Authorization': '7f1b969336002cf5f1dbf584276fa81b0f13880f'}
+AUTH = {'X-Starfighter-Authorization': '0c758ac77e1595c23756812113e730df324730e4'}
 
 def check_venue(venue):
     '''
