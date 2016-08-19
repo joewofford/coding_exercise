@@ -17,10 +17,6 @@ AUTH = {'X-Starfighter-Authorization': '0c758ac77e1595c23756812113e730df324730e4
 USERNAME = 'joewofford'
 PS = 'givepeyton#18'
 PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
-DELTA = .95
-TRADE_WINDOW = 5
-MAX_QUOTE_AGE = 1
-SPREAD_SPLIT = .9
 
 class Account(object):
 
@@ -38,68 +34,12 @@ class Account(object):
         self._parse_trade_info(b_chrome)
         self._get_venue()
 
-        q = Queue.Queue()
-        tickertape = Thread(target=self._launch_tickertape, args=(q,))
-        tickertape.start()
-        #testing to see if the ticker has launched yet, if not then wait
-        while q.empty():
-            time.sleep(1)
-
         self._extract_target_price(b_chrome)
 
-        self._iterative_buying(q)
+        self._buy_remaining()
 
         print 'We have now bought {} shares of {} on account {}.'.format(self.owned, self.ticker, self.account)
 
-        return
-
-#Example quote from tickertape:
-#{"ok":true,"quote":{"symbol":"YLVO","venue":"WDBTEX","bid":5470,"ask":5497,"bidSize":5,"askSize":11446,"bidDepth":41023,"askDepth":34338,"last":5470,"lastSize":348,"lastTrade":"2016-08-18T20:56:09.856793761Z","quoteTime":"2016-08-18T20:56:09.856854129Z"}}
-    def _iterative_buying(self, q):
-        print 'Starting iterative buying...'
-        while self.qty > self.owned:
-            if not q.empty():
-                quote = json.loads(q.get())
-                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
-                    q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0],'%Y-%m-%dT%H:%M:%S')
-                    #Checking the age of the quote to check it'll be somewhat accurate
-                    if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
-                        print 'Age good.'
-                        ask = quote['quote']['ask']
-
-                        #Checking if the 'current' ask price is lower than our target price
-                        if ask < (self.target_price*100):
-                            print 'Price good.'
-                            bid = quote['quote']['bid']
-                            buy_size = min(random.randint(1, self.max_buy), (self.qty - self.owned))
-
-                            #Determining what our bid price should be
-                            buy_bid = bid + (ask - bid) * SPREAD_SPLIT
-
-                            print 'Ordering {} shares of {} at a bid of {}, out of {} left to buy.'.format(str(buy_size), self.ticker, str(buy_bid/100), str(self.qty-self.owned))
-
-                            buy = self._single_buy(buy_size, 'limit', buy_bid)
-
-                            while buy.status_code != requests.codes.ok:
-                                buy = self._single_buy(buy_size, 'limit', buy_bid)
-
-                            t_sent = time.time()
-                            print 'Trade sent.'
-                            remaining = buy.json()['qty']
-
-                            #Checking if the full order was filled, and monitoring the status for the duraction of TRADE_WINDOW, then close and add the number of shares purchased to the class attribute
-                            while remaining > 0:
-                                if time.time() - t_sent > TRADE_WINDOW:
-                                    self._cancel_buy(buy.json()['id'])
-                                    print 'Trade cancelled.'
-                                    break
-                                time.sleep(.05)
-                                remaining = self._trade_status(buy.json()['id']).json()['qty']
-
-                            self.owned = self.owned + (buy_size - remaining)
-                            print 'We just bought {} shares out of an intial request of {}, giving us a total of {} currently owned.'.format(str(buy_size-remaining), str(buy_size), str(self.owned))
-
-            time.sleep(.2)
         return
 
     def _get_tickers(self, venue):
@@ -129,28 +69,6 @@ class Account(object):
 
         call = requests.post('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders'.format(self.venue, self.ticker), headers=AUTH, json=order)
         return call
-
-    def _trade_status(self, t_id):
-        call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}'.format(self.venue, self.ticker, t_id), headers=AUTH)
-        print call.json()
-        return call
-
-    def _cancel_buy(self, t_id):
-        call = requests.post('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}/cancel'.format(self.venue, self.ticker, t_id), headers=AUTH)
-        return call
-
-    def _launch_tickertape(self, q):
-        url="wss://api.stockfighter.io/ob/api/ws/{}/venues/{}/tickertape/stocks/{}".format(self.account, self.venue, self.ticker)
-        print 'Launching tickertape now.'
-        while 1:
-            try:
-                tick = ws.recv()
-                with q.mutex:
-                    q.queue.clear()
-                q.put(tick)
-            except:
-                ws = websocket.create_connection(url)
-        return
 
     def _login(self):
         url = 'https://www.stockfighter.io'
@@ -186,8 +104,25 @@ class Account(object):
             self.target_price = float(temp[0].text.split('$')[-1][:-1])
             return True
 
-    def _sum_fills(self, trade):
-        return sum([x['qty'] for x in trade.json()['fills']])
+    def _trade_status(self, t_id):
+        call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}'.format(self.venue, self.ticker, t_id), headers=AUTH)
+        print call.json()
+        return call
+
+    def _buy_remaining(self):
+        price = int(str(self.target_price * 95).split('.')[0])
+        buy = self._single_buy((self.qty - self.owned), 'limit', price)
+        print buy.json()
+        while buy.status_code != requests.codes.ok:
+            buy = self._single_buy((self.qty - self.owned), 'limit', price)
+            print buy.json()
+        print buy.json().keys()
+        while self.owned < self.qty:
+            check = self._trade_status(buy.json()['id'])
+            print check
+            self.owned = self.owned + check.json()['totalFilled']
+            time.sleep(2)
+        return
 
     def _extract_target_price(self, b_chrome):
         print 'Starting to try to extract target price...'
@@ -209,7 +144,7 @@ class Account(object):
                     print 'Trade cancelled.'
                     break
                 time.sleep(.1)
-                remaining = self._trade_status(buy.json()['id']).json()['qty']
+                remaining = self._trade_status(buy.json()['id']).json()['qyt']
                 print 'Remaining = {}'.format(str(remaining))
 
             self.owned = self.owned + (10 - remaining)
