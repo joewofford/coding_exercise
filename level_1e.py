@@ -17,10 +17,10 @@ AUTH = {'X-Starfighter-Authorization': '0c758ac77e1595c23756812113e730df324730e4
 USERNAME = 'joewofford'
 PS = 'givepeyton#18'
 PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
-DELTA = .95
+DELTA = .98
 TRADE_WINDOW = 5
 MAX_QUOTE_AGE = 1
-SPREAD_SPLIT = .9
+SPREAD_SPLIT = .95
 
 class Account(object):
 
@@ -28,7 +28,7 @@ class Account(object):
         self.target_price = 0
         return
 
-    def block_buy(self, qty=100000, max_buy=200, owned=0):
+    def block_buy(self, qty=100000, max_buy=1000, owned=0):
         self.qty = qty
         self.max_buy = max_buy
         self.owned = owned
@@ -64,7 +64,6 @@ class Account(object):
                     q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0],'%Y-%m-%dT%H:%M:%S')
                     #Checking the age of the quote to check it'll be somewhat accurate
                     if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
-                        print 'Age good.'
                         ask = quote['quote']['ask']
 
                         #Checking if the 'current' ask price is lower than our target price
@@ -74,7 +73,7 @@ class Account(object):
                             buy_size = min(random.randint(1, self.max_buy), (self.qty - self.owned))
 
                             #Determining what our bid price should be
-                            buy_bid = bid + (ask - bid) * SPREAD_SPLIT
+                            buy_bid = int(str(bid + (ask - bid) * SPREAD_SPLIT).split('.')[0])
 
                             print 'Ordering {} shares of {} at a bid of {}, out of {} left to buy.'.format(str(buy_size), self.ticker, str(buy_bid/100), str(self.qty-self.owned))
 
@@ -85,19 +84,21 @@ class Account(object):
 
                             t_sent = time.time()
                             print 'Trade sent.'
-                            remaining = buy.json()['qty']
+                            t_id = buy.json()['id']
+                            bought = self._sum_fills(self._trade_status(t_id))
 
                             #Checking if the full order was filled, and monitoring the status for the duraction of TRADE_WINDOW, then close and add the number of shares purchased to the class attribute
-                            while remaining > 0:
+                            while bought < buy_size:
                                 if time.time() - t_sent > TRADE_WINDOW:
-                                    self._cancel_buy(buy.json()['id'])
+                                    self._cancel_buy(t_id)
                                     print 'Trade cancelled.'
+                                    bought = self._sum_fills(self._trade_status(t_id))
                                     break
                                 time.sleep(.05)
-                                remaining = self._trade_status(buy.json()['id']).json()['qty']
+                                bought = self._sum_fills(self._trade_status(t_id))
 
-                            self.owned = self.owned + (buy_size - remaining)
-                            print 'We just bought {} shares out of an intial request of {}, giving us a total of {} currently owned.'.format(str(buy_size-remaining), str(buy_size), str(self.owned))
+                            self.owned = self.owned + bought
+                            print 'We just bought {} shares out of an intial request of {}, giving us a total of {} currently owned.'.format(str(bought), str(buy_size), str(self.owned))
 
             time.sleep(.2)
         return
@@ -132,7 +133,6 @@ class Account(object):
 
     def _trade_status(self, t_id):
         call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}'.format(self.venue, self.ticker, t_id), headers=AUTH)
-        print call.json()
         return call
 
     def _cancel_buy(self, t_id):
@@ -197,23 +197,23 @@ class Account(object):
             while buy.status_code != requests.codes.ok:
                 buy = self._single_buy(10, 'market')
             t_sent = time.time()
-            print 'Trade sent.'
-            print buy.json()
-            remaining = buy.json()['qty']
-            print 'Remaining = {}'.format(str(remaining))
+            t_id = buy.json()['id']
+            bought = self._sum_fills(self._trade_status(t_id))
+            print 'Bought = {}'.format(str(bought))
 
             #Checking if the full order was filled, and monitoring status if not until the trade has been open for TRADE_WINDOW, then close and add the number of shares purchased to the class attribute
-            while remaining >0:
+            while bought < 10:
                 if time.time() - t_sent > TRADE_WINDOW:
-                    self._cancel_buy(buy.json()['id'])
+                    self._cancel_buy(t_id)
                     print 'Trade cancelled.'
+                    bought = self._sum_fills(self._trade_status(t_id))
                     break
                 time.sleep(.1)
-                remaining = self._trade_status(buy.json()['id']).json()['qty']
-                print 'Remaining = {}'.format(str(remaining))
+                bought = self._sum_fills(self._trade_status(t_id))
+                print 'Bought = {}'.format(str(bought))
 
-            self.owned = self.owned + (10 - remaining)
-            print 'We just bought {} shares out of an intial request of {}, giving us a total of {} currently owned.'.format(str(10-remaining), '10', str(self.owned))
+            self.owned = self.owned + bought
+            print 'We just bought {} shares out of an intial request of {}, giving us a total of {} currently owned.'.format(str(bought), '10', str(self.owned))
 
             #Now pause for a bit and check if the trade desk has revealed the target price, then iterate before trading again to prod it along.
             time.sleep(1)
