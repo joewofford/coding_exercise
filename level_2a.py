@@ -36,6 +36,32 @@ class MakeMarket(object):
     def __init__(self):
         return
 
+    def make_market(self):
+        '''
+        INPUT:
+        OUTPUT:
+
+        '''
+        #Performing pre-trading setup and parsing
+        b_chrome = self._login()
+        self.initiate_market(b_chrome)
+        self.parse_trade_info(b_chrome)
+
+        #Launching the tickertape through a websocet, which will communicate the quotes through the queue
+        q = Queue.Queue()
+        tickertape = Thread(target=elf._launch_tickertape, args(q,))
+        tickertape.start()
+
+        #Testing to see if the tickertape has launched yet, if not then wait
+        while q.empty():
+            time.sleep(1)
+
+        self._start_trading()
+
+
+    def _start_trading(self)
+
+
     def _single_trade(self, qty, direction, price, order_type='limit'):
         '''
         INPUT:
