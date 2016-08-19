@@ -6,23 +6,36 @@ import time
 import websocket
 import json
 import Queue
-import re
 
 from threading import Thread
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from datetime import datetime
 
+#API key for the stockfighter website
 AUTH = {'X-Starfighter-Authorization': '0c758ac77e1595c23756812113e730df324730e4'}
+
+#User information for login (user specific)
 USERNAME = 'joewofford'
 PS = 'givepeyton#18'
+
+#path to the chromedriver for selenium to use (machine specific)
 PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
+
+#Parameters related to how the bulk of the trades will be performed
+#How far below the customer target price the ask has to be to initiate a trade
 DELTA = .96
+#How long a trade will be left active (seconds)
 TRADE_WINDOW = 10
+#The maximum age, in seconds, of a quote to use its information to initiate a trade
 MAX_QUOTE_AGE = 1
+#What price to bid, relative to the current market spread (>1 will be above ask in the most recent quote, <0 will be below most recent bid)
 SPREAD_SPLIT = 1.03
 
+
 class Account(object):
+    '''
+    A class designed to execute bulk-buys on the stockfighter website in the chock_a_block game.
+    '''
 
     def __init__(self):
         '''
@@ -36,27 +49,35 @@ class Account(object):
     def block_buy(self, qty=100000, max_buy=1000, owned=0):
         '''
         INPUT:
+        qty - The final number of shares self.account wishes to own (ind)
+        max_buy - The maximum number of shares to purchase in any single transaction (int)
+        owned - Number of shares already owned
         OUTPUT:
-
+        The main method of the class.  First performs the web interfacing to log-in and launch the game, initiates the tickertape, then executes a series of trades of different types, initially to gain information on the market/situation, then to accumulate shares.
         '''
         self.qty = qty
         self.max_buy = max_buy
         self.owned = owned
 
+        #Performing pre-trade setup and parsing
         b_chrome = self._login()
         self._initiate_market(b_chrome)
         self._parse_trade_info(b_chrome)
         self._get_venue()
 
+        #Launching the tickertape through a websocket, which will communicate the quotes through the queue
         q = Queue.Queue()
         tickertape = Thread(target=self._launch_tickertape, args=(q,))
         tickertape.start()
-        #testing to see if the ticker has launched yet, if not then wait
+
+        #Testing to see if the ticker has launched yet, if not then wait
         while q.empty():
             time.sleep(1)
 
+        #Get the target price our customer wants to guide our later, accumulative trading
         self._extract_target_price(b_chrome)
 
+        #Purchase the remainder of the shares our customer wants
         self._iterative_buying(q)
 
         print 'We have now bought {} shares of {} on account {}.'.format(self.owned, self.ticker, self.account)
@@ -65,30 +86,34 @@ class Account(object):
 
     def _iterative_buying(self, q):
         '''
-        INPUT:
+        INPUT: Queue object containing the most recent quote from the websocket tickertape stream
         OUTPUT:
-
+        Performs the vast bulk of the share purchases for the block buy.
         '''
         print 'Starting iterative buying...'
         while self.qty > self.owned:
             if not q.empty():
+                #Getting the most current quote, and checking its quality (has all the required information fields)
                 quote = json.loads(q.get())
                 if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                    #Stripping the time the quote was generated
                     q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0],'%Y-%m-%dT%H:%M:%S')
-                    #Checking the age of the quote to check it'll be somewhat accurate
+                    #Checking the age of the quote to check it isn't too old to be reasonably accurate using the MAX_QUOTE_AGE
                     if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
                         ask = quote['quote']['ask']
 
-                        #Checking if the 'current' ask price is lower than our target price
+                        #Checking if the 'current' ask price is lower than our target price, thus initiating a trade attempt
                         if ask < (self.target_price*100):
                             bid = quote['quote']['bid']
+                            #Deciding how many shares to include in the trade attempt (random size, within range)
                             buy_size = min(random.randint(1, self.max_buy), (self.qty - self.owned))
 
-                            #Determining what our bid price should be
+                            #Determining what our bid price should be using the SPREAD_SPLIT value
                             buy_bid = int(str(bid + (ask - bid) * SPREAD_SPLIT).split('.')[0])
 
                             print 'Ordering {} shares of {} at a bid of {}, out of {} left to buy.'.format(str(buy_size), self.ticker, str(buy_bid/100), str(self.qty-self.owned))
 
+                            #Making the initial buy attempt, and repeating until it goes through
                             buy = self._single_buy(buy_size, 'limit', buy_bid)
 
                             while buy.status_code != requests.codes.ok:
@@ -99,7 +124,7 @@ class Account(object):
                             t_id = buy.json()['id']
                             bought = self._sum_fills(self._trade_status(t_id))
 
-                            #Checking if the full order was filled, and monitoring the status for the duraction of TRADE_WINDOW, then close and add the number of shares purchased to the class attribute
+                            #Checking if the full order was filled, and monitoring the status for the duraction of TRADE_WINDOW, then close the trade and add the number of shares purchased to the class attribute
                             while bought < buy_size:
                                 if time.time() - t_sent > TRADE_WINDOW:
                                     self._cancel_buy(t_id)
@@ -122,6 +147,10 @@ class Account(object):
         Queries the stockfighter API to determine stocks traded on the inputted venue/exchange, and returns them as a list of ticker symbols.
         '''
         call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks'.format(venue), headers=AUTH)
+
+        if not call.ok:
+            return []
+
         return [d['symbol'] for d in call.json()['symbols']]
 
     def _get_venue(self):
