@@ -100,7 +100,7 @@ class MakeMarket(object):
                             buy_active = True
 
                         if self.owned > (-1 * self.max_own):
-                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE)).split('.')[0]))
+                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]))
                             while sell.status_code != requests.codes.ok:
                                 time.sleep(.01)
                                 sell = self._single_trade(trade_size, 'sell', (ask * (1 - TRADE_AGGRESSION)))
@@ -108,6 +108,9 @@ class MakeMarket(object):
                             sell_id = sell.json()['id']
                             sold = self._sum_fills(self._trade_status(sell_id))
                             sell_active = True
+
+                        earned = self._sum_earned(sell)
+                        spent = self._sum_spent(buy)
 
                         #Checking if the full orderes were filled, and monitoring the status of both the sell and buy orders for the duration of TRADE_WINDOW.  Close either when they reach the maximum duraction and adjust the shares owned accordingly.
                         while bought < trade_size or sold < trade_size:
@@ -129,11 +132,11 @@ class MakeMarket(object):
                             bought = self._sum_fills(buy_final)
                             spent = self._sum_spent(buy_final)
 
-                            sell_final = self._trade_status(sold_id)
+                            sell_final = self._trade_status(sell_id)
                             sold = self._sum_fills(sell_final)
                             earned = self._sum_earned(sell_final)
 
-                        self.profit = self.profit + spend + earned
+                        self.profit = self.profit + spent + earned
                         self.owned = self.owned + bought - sold
 
     def _single_trade(self, qty, direction, price, order_type='limit'):
@@ -156,7 +159,7 @@ class MakeMarket(object):
         'orderType': order_type
         }
 
-        call = requests.post('https://api.stockfighter.iio/ob/api/venues/{}/stocks/{}/orders'.format(self.venue, self.ticker), headers=AUTH, json=order)
+        call = requests.post('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders'.format(self.venue, self.ticker), headers=AUTH, json=order)
         return call
 
     def _trade_status(self, t_id):
@@ -165,7 +168,7 @@ class MakeMarket(object):
         OUTPUT: Request response object (use .json() method to access data)
         Queries the stockfighter API for the status of the trade corresponding to t_id.
         '''
-        call = requests.get('https://stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}'.format(self.venue, self.ticker, t_id), headers=AUTH)
+        call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}'.format(self.venue, self.ticker, t_id), headers=AUTH)
         return call
 
     def _cancel_trade(self, t_id):
@@ -174,7 +177,7 @@ class MakeMarket(object):
         OUTPUT: Request response object (use .json() method to access data)
         Queries the stockfighter API to cancel the trade corresponding to t_id.
         '''
-        call = requests.post('https://api.sockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}/cancel'.format(self.venue, self.ticker, t_id), headers=AUTH)
+        call = requests.post('https://api.stockfighter.io/ob/api/venues/{}/stocks/{}/orders/{}/cancel'.format(self.venue, self.ticker, t_id), headers=AUTH)
         return call
 
     def _launch_tickertape(self, q):
