@@ -60,7 +60,7 @@ class Account(object):
         while self.qty > self.owned:
             if not q.empty():
                 quote = json.loads(q.get())
-                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime's]):
                     q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0],'%Y-%m-%dT%H:%M:%S')
                     #Checking the age of the quote to check it'll be somewhat accurate
                     if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
