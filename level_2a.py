@@ -12,7 +12,7 @@ from selenium import webdriver
 from datetime import datetime
 
 #API key for the stockfighter website
-AUTH = {'X-Starfighter-Authorization': '0c758ac77e1595c23756812113e730df324730e4'}
+AUTH = {'X-Starfighter-Authorization': '9bdfb2fc891821dabf7697fd40cd98e2365c02eb'}
 
 #User information for login (user specific)
 USERNAME = 'joewofford'
@@ -33,11 +33,12 @@ MAX_QUOTE_AGE = 1
 
 class MakeMarket(object):
 
-    def __init__(self, target=10000, max_trade = 20, max_own = 1000):
+    def __init__(self, target=10000, max_trade = 20, max_own = 1000, owned=0):
         self.target = target
         self.profit = 0
         self.max_trade= max_trade
         self.max_own = max_own
+        self.owned = 0
         return
 
     def make_market(self):
@@ -51,20 +52,23 @@ class MakeMarket(object):
 
         #Performing pre-trading setup and parsing
         b_chrome = self._login()
-        self.initiate_market(b_chrome)
-        self.parse_trade_info(b_chrome)
+        self._initiate_market(b_chrome)
+        self._parse_trade_info(b_chrome)
 
         #Launching the tickertape through a websocet, which will communicate the quotes through the queue
         q = Queue.Queue()
-        tickertape = Thread(target=elf._launch_tickertape, args(q,))
+        tickertape = Thread(target=self._launch_tickertape, args = (q,))
         tickertape.start()
 
         #Testing to see if the tickertape has launched yet, if not then wait
         while q.empty():
             time.sleep(1)
 
-        self._start_trading()
+        self._start_trading(q)
 
+        print 'We have made {}, and currently own {} shares of {}.'.format(str(self.profit), str(self.owned), self.ticker)
+
+        return
 
     def _start_trading(self, q):
         '''
@@ -86,28 +90,51 @@ class MakeMarket(object):
                         #Deciding how many shares to include in the current trade attempt (random size, within range)
                         trade_size = min(random.randint(1, self.max_trade), (self.max_own - abs(self.owned)))
                         if self.owned < self.max_own:
-                            buy = self._single_trade(trade_size, 'buy', (bid * (1 + TRADE_AGGRESSION)))
+                            buy = self._single_trade(trade_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]))
                             while buy.status_code != requests.codes.ok:
+                                time.sleep(.01)
                                 buy = self._single_trade(trade_size, 'buy', (bid * (1 + TRADE_AGGRESSION)))
                             buy_sent = time.time()
                             buy_id = buy.json()['id']
                             bought = self._sum_fills(self._trade_status(buy_id))
+                            buy_active = True
 
                         if self.owned > (-1 * self.max_own):
-                            sell = self._single_trade(trade_size, 'sell', (ask * (1 - TRADE)))
+                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE)).split('.')[0]))
                             while sell.status_code != requests.codes.ok:
+                                time.sleep(.01)
                                 sell = self._single_trade(trade_size, 'sell', (ask * (1 - TRADE_AGGRESSION)))
                             sell_sent = time.time()
                             sell_id = sell.json()['id']
                             sold = self._sum_fills(self._trade_status(sell_id))
+                            sell_active = True
 
                         #Checking if the full orderes were filled, and monitoring the status of both the sell and buy orders for the duration of TRADE_WINDOW.  Close either when they reach the maximum duraction and adjust the shares owned accordingly.
                         while bought < trade_size or sold < trade_size:
+                            if time.time() - buy_sent > TRADE_WINDOW and buy_active == True:
+                                self._cancel_trade(buy_id)
+                                bought = self._sum_fills(self._trade_status(buy_id))
+                                buy_active = False
 
+                            if time.time() - sell_sent > TRADE_WINDOW and sell_active == True:
+                                self._cancel_trade(sell_id)
+                                sold = self._sum_fills(self._trade_status(sell_id))
+                                sell_active = False
 
-#DEAL WITH MULTIPLIED PRICES BEING RANDOM ASS NUMBERS!!!!!
+                            if buy_active == False and sell_active == False:
+                                break
 
+                            time.sleep(.02)
+                            buy_final = self._trade_status(buy_id)
+                            bought = self._sum_fills(buy_final)
+                            spent = self._sum_spent(buy_final)
 
+                            sell_final = self._trade_status(sold_id)
+                            sold = self._sum_fills(sell_final)
+                            earned = self._sum_earned(sell_final)
+
+                        self.profit = self.profit + spend + earned
+                        self.owned = self.owned + bought - sold
 
     def _single_trade(self, qty, direction, price, order_type='limit'):
         '''
@@ -165,7 +192,7 @@ class MakeMarket(object):
                     q.queue.clear()
                 q.put(tick)
             except:
-            ws = websocket.create_connection(url)
+                ws = websocket.create_connection(url)
         return
 
     def _login(self):
@@ -203,11 +230,11 @@ class MakeMarket(object):
         OUTPUT:
         Uses the webdriver to parse the opening page of the 'sell_side' game for the account to be traded on (self.account), the exchange where the trades will take place (self.venue), and the stock to be traded (self.ticker).  It then closes the pop-up window.
         '''
-        self.account = p_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/strong').text.split()[1]
-        self.venue = p_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[1]').text
-        self.ticker = p_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[2]').text
+        self.account = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/strong').text.split()[1]
+        self.venue = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[1]').text
+        self.ticker = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[2]').text
         time.sleep(2)
-        b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[3]/button').click()ßßß
+        b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[3]/button').click()
         return
 
     def _sum_fills(self, trade):
@@ -217,3 +244,13 @@ class MakeMarket(object):
         Aggregataes all of the fills associated with the trade, resulting in the total number of shares bought/sold at the time of query.
         '''
         return sum([x['qty'] for x in trade.json()['fills']])
+
+    def _sum_spent(self, trade):
+        return (-1 * sum([x['qty'] * x['price'] for x in trade.json()['fills']]))
+
+    def _sum_earned(self, trade):
+        return sum([x['qty'] * x['price'] for x in trade.json()['fills']])
+
+if __name__ == '__main__':
+    market = MakeMarket()
+    market.make_market()

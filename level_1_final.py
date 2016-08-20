@@ -124,7 +124,7 @@ class Account(object):
                             t_id = buy.json()['id']
                             bought = self._sum_fills(self._trade_status(t_id))
 
-                            #Checking if the full order was filled, and monitoring the status for the duraction of TRADE_WINDOW, then close the trade and add the number of shares purchased to the class attribute
+                            #Checking if the full order was filled, and monitoring the status for the duration of TRADE_WINDOW, then close the trade and add the number of shares purchased to the class attribute
                             while bought < buy_size:
                                 if time.time() - t_sent > TRADE_WINDOW:
                                     self._cancel_buy(t_id)
