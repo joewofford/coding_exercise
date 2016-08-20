@@ -23,22 +23,23 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will big/ask (larger number is more aggressive)
-TRADE_AGGRESSION = .01
+TRADE_AGGRESSION = .02
 #How long a trade will be left active (seconds)
 TRADE_WINDOW = 3
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .5
+MAX_QUOTE_AGE = 1
 
 
 
 class MakeMarket(object):
 
-    def __init__(self, target=10000, max_trade = 10, max_own = 1000, owned=0):
+    def __init__(self, target=10000, max_trade = 50, max_own = 1000, owned=0):
         self.target = target
         self.profit = 0
         self.max_trade= max_trade
         self.max_own = max_own
         self.owned = 0
+        self.last_share_price = 0
         return
 
     def make_market(self):
@@ -81,7 +82,9 @@ class MakeMarket(object):
             if not q.empty():
                 #Getting the most current quote, and checking its quality (has all the required information fields)
                 quote = json.loads(q.get())
-                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime', 'last']):
+                    self.last_share_price = quote['quote']['last']
+
                     #@Stripping the time the quote was generated
                     q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0], '%Y-%m-%dT%H:%M:%S')
                     #Checking the age of the quote to see if it isn't too old to be reasonably accurate using the MAX_QUOTE_AGE
@@ -90,57 +93,33 @@ class MakeMarket(object):
                         bid = quote['quote']['bid']
                         #Deciding how many shares to include in the current trade attempt (random size, within range)
                         trade_size = min(random.randint(1, self.max_trade), (self.max_own - abs(self.owned)))
+
                         if self.owned < self.max_own:
-                            buy = self._single_trade(trade_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]))
-                            while buy.status_code != requests.codes.ok:
-                                time.sleep(.01)
-                                buy = self._single_trade(trade_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]))
-                            buy_sent = time.time()
-                            buy_id = buy.json()['id']
-                            print 'Buy order sent.'
-                            bought = self._sum_fills(self._trade_status(buy_id))
-                            buy_active = True
+                            buy = self._single_trade(trade_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]), 'immediate-or-cancel')
 
                         if self.owned > (-1 * self.max_own):
-                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]))
-                            while sell.status_code != requests.codes.ok:
-                                time.sleep(.01)
-                                sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]))
-                            sell_sent = time.time()
-                            sell_id = sell.json()['id']
-                            print 'Sell order sent.'
-                            sold = self._sum_fills(self._trade_status(sell_id))
-                            sell_active = True
+                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]), 'immediate-or-cancel')
 
-                        earned = self._sum_earned(sell)
-                        spent = self._sum_spent(buy)
-
-                        #Checking if the full orderes were filled, and monitoring the status of both the sell and buy orders for the duration of TRADE_WINDOW.  Close either when they reach the maximum duraction and adjust the shares owned accordingly.
-                        while bought < trade_size or sold < trade_size:
-                            if time.time() - buy_sent > TRADE_WINDOW and buy_active == True:
-                                self._cancel_trade(buy_id)
-                                bought = self._sum_fills(self._trade_status(buy_id))
-                                buy_active = False
-
-                            if time.time() - sell_sent > TRADE_WINDOW and sell_active == True:
-                                self._cancel_trade(sell_id)
-                                sold = self._sum_fills(self._trade_status(sell_id))
-                                sell_active = False
-
-                            if buy_active == False and sell_active == False:
-                                break
-
-                            time.sleep(.01)
-                            buy_final = self._trade_status(buy_id)
+                        if buy.status_code == requests.codes.ok:
+                            buy_final = self._trade_status(buy.json()['id'])
                             bought = self._sum_fills(buy_final)
                             spent = self._sum_spent(buy_final)
+                            print 'Buy order sent.'
+                        else:
+                            bought = 0
+                            spend = 0
 
-                            sell_final = self._trade_status(sell_id)
+                        if sell.status_code == requests.codes.ok:
+                            sell_final = self._trade_status(sell.json()['id'])
                             sold = self._sum_fills(sell_final)
                             earned = self._sum_earned(sell_final)
+                            print 'Sell order sent.'
+                        else:
+                            sold = 0
+                            earned = 0
 
-                        self.profit = self.profit + (spent + earned)/100
                         self.owned = self.owned + bought - sold
+                        self.profit = self.profit + (spent + earned)/100 + (self.owned * self.last_share_price)
 
     def _single_trade(self, qty, direction, price, order_type='limit'):
         '''
