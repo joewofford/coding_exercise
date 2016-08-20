@@ -33,7 +33,11 @@ MAX_QUOTE_AGE = 1
 
 class MakeMarket(object):
 
-    def __init__(self):
+    def __init__(self, target=10000, max_trade = 20, max_own = 1000):
+        self.target = target
+        self.profit = 0
+        self.max_trade= max_trade
+        self.max_own = max_own
         return
 
     def make_market(self):
@@ -42,6 +46,9 @@ class MakeMarket(object):
         OUTPUT:
 
         '''
+        #Initializing various attributes
+        self.owned = 0
+
         #Performing pre-trading setup and parsing
         b_chrome = self._login()
         self.initiate_market(b_chrome)
@@ -59,7 +66,47 @@ class MakeMarket(object):
         self._start_trading()
 
 
-    def _start_trading(self)
+    def _start_trading(self, q):
+        '''
+        INPUT:
+        OUTPUT:
+
+        '''
+        while self.profit < self.target:
+            if not q.empty():
+                #Getting the most current quote, and checking its quality (has all the required information fields)
+                quote = json.loads(q.get())
+                if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                    #@Stripping the time the quote was generated
+                    q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                    #Checking the age of the quote to see if it isn't too old to be reasonably accurate using the MAX_QUOTE_AGE
+                    if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
+                        ask = quote['quote']['ask']
+                        bid = quote['quote']['bid']
+                        #Deciding how many shares to include in the current trade attempt (random size, within range)
+                        trade_size = min(random.randint(1, self.max_trade), (self.max_own - abs(self.owned)))
+                        if self.owned < self.max_own:
+                            buy = self._single_trade(trade_size, 'buy', (bid * (1 + TRADE_AGGRESSION)))
+                            while buy.status_code != requests.codes.ok:
+                                buy = self._single_trade(trade_size, 'buy', (bid * (1 + TRADE_AGGRESSION)))
+                            buy_sent = time.time()
+                            buy_id = buy.json()['id']
+                            bought = self._sum_fills(self._trade_status(buy_id))
+
+                        if self.owned > (-1 * self.max_own):
+                            sell = self._single_trade(trade_size, 'sell', (ask * (1 - TRADE)))
+                            while sell.status_code != requests.codes.ok:
+                                sell = self._single_trade(trade_size, 'sell', (ask * (1 - TRADE_AGGRESSION)))
+                            sell_sent = time.time()
+                            sell_id = sell.json()['id']
+                            sold = self._sum_fills(self._trade_status(sell_id))
+
+                        #Checking if the full orderes were filled, and monitoring the status of both the sell and buy orders for the duration of TRADE_WINDOW.  Close either when they reach the maximum duraction and adjust the shares owned accordingly.
+                        while bought < trade_size or sold < trade_size:
+
+
+#DEAL WITH MULTIPLIED PRICES BEING RANDOM ASS NUMBERS!!!!!
+
 
 
     def _single_trade(self, qty, direction, price, order_type='limit'):
