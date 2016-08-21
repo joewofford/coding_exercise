@@ -10,6 +10,7 @@ import threading
 
 from selenium import webdriver
 from datetime import datetime
+from collections import defaultdict
 
 #API key for the stockfighter website
 AUTH = {'X-Starfighter-Authorization': '9bdfb2fc891821dabf7697fd40cd98e2365c02eb'}
@@ -23,13 +24,16 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will big/ask (larger number is more aggressive)
-TRADE_AGGRESSION = .02
+TRADE_AGGRESSION = .08
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .5
+MAX_QUOTE_AGE = 1
+#Ownership tollerance, the point at which to slow buying/selling as the account approaches maximum long/short position
+OWNERSHIP_TOLLERANCE = .8
+OWNERSHIP_MULTIPLE = .8
 
 class MakeMarket(object):
 
-    def __init__(self, target=10000, min_trade=5, max_trade=25, max_own=1000, owned=0):
+    def __init__(self, target=10000, min_trade=20, max_trade=80, max_own=1000, owned=0):
         self.target = target
         self.max_trade = max_trade
         self.min_trade = min_trade
@@ -42,7 +46,7 @@ class MakeMarket(object):
         self.last_share_price = 0
         self.cash = 0
         self.trade_count = 0
-        self.trade_ids = set()
+        self.trade_fills = defaultdict(set)
 
         #Performing pre-trading setup and parsing
         b_chrome = self._login()
@@ -113,12 +117,16 @@ class MakeMarket(object):
                         trade_size = min(random.randint(self.min_trade, self.max_trade), (self.max_own - abs(self.owned)))
 
                         if self.owned < self.max_own:
-                            buy = self._single_trade(trade_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]), 'fill-or-kill')
-                            self.trade_ids.add(buy.json()['id'])
+                            buy_size = trade_size
+                            if self.owned > (self.max_own * OWNERSHIP_TOLLERANCE):
+                                buy_size = buy_size * OWNERSHIP_MULTIPLE
+                            buy = self._single_trade(buy_size, 'buy', int(str(bid * (1 + TRADE_AGGRESSION)).split('.')[0]), 'immediate-or-cancel')
 
                         if self.owned > (-1 * self.max_own):
-                            sell = self._single_trade(trade_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]), 'fill-or-kill')
-                            self.trade_ids.add(sell.json()['id'])
+                            sell_size = trade_size
+                            if self.owned < (self.max_own * OWNERSHIP_TOLLERANCE):
+                                sell_size = sell_size * OWNERSHIP_MULTIPLE
+                            sell = self._single_trade(sell_size, 'sell', int(str(ask * (1 - TRADE_AGGRESSION)).split('.')[0]), 'immediate-or-cancel')
         return
 
     def _single_trade(self, qty, direction, price, order_type='limit'):
@@ -144,24 +152,21 @@ class MakeMarket(object):
         return call
 
     def _sum_trade_value(self, trade):
-        return sum([x['qty'] * x['price'] for x in trade['order']['fills']])/100
+        return sum([x['qty'] * x['price'] for x in trade['order']['fills'] if x['ts'] not in self.trade_fills[str(trade['order']['id'])]])/100
 
     def _sum_fills(self, trade):
         '''
         INPUT: Requests return item corresponding to a trade status query
         OUTPUT: The total number of shares filled (bought or sold) thus far (int)
-        Aggregataes all of the fills associated with the trade, resulting in the total number of shares bought/sold at the time of query.
+        Aggregataes all of the fills associated with the trade after checking if each fill has already been account for, resulting in the total number of shares bought/sold at the time of query.
         '''
-        return sum([x['qty'] for x in trade['order']['fills']])
+        return sum([x['qty'] for x in trade['order']['fills'] if x['ts'] not in self.trade_fills[str(trade['order']['id'])]])
 
     def _tabulate_trade_results(self, tradequeue):
         print 'Launching the trade tabulator.'
         while 1:
             if not tradequeue.empty():
-                print 'The trade queue is not empty, hooray!!!'
                 trade = json.loads(tradequeue.get())
-                self.trade_ids.add(trade['order']['id'])
-                self.trade_count += 1
 
                 if trade['order']['direction'] == 'buy':
                     self.owned = self.owned + self._sum_fills(trade)
@@ -170,6 +175,10 @@ class MakeMarket(object):
                 if trade['order']['direction'] == 'sell':
                     self.owned = self.owned - self._sum_fills(trade)
                     self.cash = self.cash + self._sum_trade_value(trade)
+
+                #Setting each trade_id as a key, with the value as a set of the timestamps
+                self.trade_fills[str(trade['order']['id'])].update([x['ts'] for x in trade['order']['fills']])
+                self.trade_count += 1
 
                 self.current_profit = self.cash + self.owned * self.last_share_price
                 print 'Total number of executed trades = {}'.format(str(self.trade_count))
