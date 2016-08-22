@@ -24,9 +24,9 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less likely profit is derived from each trade, but the more likely each bid/ask is to find a counter party (larger than .5...not such a good idea!).
-TRADE_AGGRESSION = .18
+TRADE_AGGRESSION = .15
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .75
+MAX_QUOTE_AGE = .7
 #Ownership tollerance, the point at which to slow buying/selling as the account approaches maximum long/short position
 OWNERSHIP_TOLLERANCE = .6
 OWNERSHIP_MULTIPLE = .8
@@ -56,7 +56,7 @@ class MakeMarket(object):
         '''
         INPUT:
         OUTPUT:
-        The main method of the class.  First performs the web interfacing to log-in and launch the sell_side game, initiates the tickertape, then executes a series of trades (bids near the bottom of the spread, asks near the top) to perform "market-making" until the target value is reached.
+        The main method of the class.  First performs the web interfacing to log-in and launch the sell_side game, initiates the tickertape and tradetape, then executes a series of trades (bids near the bottom of the spread, asks near the top) to perform "market-making" until the target value is reached.
         '''
         #Initializing various attributes needed for market making
         self.current_profit = 0
@@ -70,7 +70,7 @@ class MakeMarket(object):
         self._initiate_market(b_chrome)
         self._parse_trade_info(b_chrome)
 
-        #Launching the tickertape through a websocket, which will communicate the quotes through the self.quote_queue attribute
+        #Launching the tickertape through a websocket, which will communicate the quotes through a queue object
         tickerqueue = Queue.Queue()
         tickertape = threading.Thread(target = self._launch_tickertape, args = (tickerqueue,))
         tickertape.start()
@@ -79,7 +79,7 @@ class MakeMarket(object):
         while tickerqueue.empty():
             time.sleep(1)
 
-        #Launching the tradetape through a websocket, which will communicate executed trades through the self.trade_queue attribute
+        #Launching the tradetape through a websocket, which will communicate executed trades through a queue object
         tradequeue = Queue.Queue()
         tradetape = threading.Thread(target = self._launch_tradetape, args = (tradequeue,))
         tradetape.start()
@@ -87,7 +87,7 @@ class MakeMarket(object):
         #Arbitrary pause to wait for tradetape to launch (can't test without trading)...
         time.sleep(10)
 
-        #Launching the tabulate_trade_results method in a Thread to update the class attributes as each trade confirmation comes over the tradetame
+        #Launching the tabulate_trade_results method in a Thread to update the class attributes as each trade confirmation comes over the tradetape
         tabulatetrades = threading.Thread(target = self._tabulate_trade_results, args = (tradequeue,))
         tabulatetrades.start()
 
@@ -131,19 +131,20 @@ class MakeMarket(object):
                         #Strip the time the quote was generated
                         q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0], '%Y-%m-%dT%H:%M:%S')
 
-                        print 'Quote age is : {}'.format(str((datetime.utcnow() - q_time).total_seconds()))
+                        #print 'Quote age is : {}'.format(str((datetime.utcnow() - q_time).total_seconds()))
 
                         #Checking to see if the quote isn't too old to trade on
                         if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
                             ask = quote['quote']['ask']
                             bid = quote['quote']['bid']
-                            print 'Sending trades.'
+                            #print 'Sending trades.'
 
                             #Deciding how many shares to trade (random inside the range)
                             trade_size = min(random.randint(self.min_trade, self.max_trade), (self.max_own - abs(self.owned)))
 
                             if self.owned < self.max_own:
                                 buy_size = trade_size
+                                #Resizing buy to account for ownership limit
                                 if self.owned > (self.max_own * OWNERSHIP_TOLLERANCE):
                                     buy_size = buy_size * OWNERSHIP_MULTIPLE
                                 buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
@@ -151,6 +152,7 @@ class MakeMarket(object):
 
                             if self.owned > (-1 * self.max_own):
                                 sell_size = trade_size
+                                #Resizing sell to account for ownership limit
                                 if self.owned < (-1 * self.max_own * OWNERSHIP_TOLLERANCE):
                                     sell_size = sell_size * OWNERSHIP_MULTIPLE
                                 sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
@@ -294,9 +296,9 @@ class MakeMarket(object):
         '''
         b_chrome.find_element_by_xpath('//*[@id="app"]/div/div/div/div/div[1]/div[2]/ul/li[1]/b/a').click()
         time.sleep(3)
-        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]').click()
+        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/a/span[1]/span[1]').click()
         time.sleep(1)
-        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[2]/a/span[1]/b').click()
+        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[3]/a/span[1]/b').click()
         time.sleep(10)
         return
 
@@ -317,7 +319,6 @@ class MakeMarket(object):
 
     def _pause(self):
         programPause = raw_input("Press the <ENTER> key to continue...")
-
 
 
 if __name__ == '__main__':
