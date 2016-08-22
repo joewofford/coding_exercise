@@ -1,0 +1,35 @@
+Picking Up Pennies In Front Of Dueling Steam Rollers
+You've demonstrated a bit of a knack for making markets as a sell-sider, so we've hired you at Potter, Anderson, and Manning to take on a bit more challenging of a market.
+
+FearRock Holdings (FRH) is a bit of an odd duck. Their quarterly reports show a ludicrously profitable business... but, well, some of their business practices are a little... questionable. The underlying product may or may not actually do what they claim it does. Also, their CFO has a degree in screenwriting, and his ability to spin epic tales utterly disconnected from material reality and have people believe in them for an hour or two is legendary.
+
+Or at least that is what Al Bickman, noted hedge fund investor, says. And he hasn't been quiet about it, either -- he walked over to their corporate office and literally nailed 97 PowerPoint slides to their door yesterday.
+
+The last slide was the disclaimer: "My fund holds no position in FearRock Holdings, but we will soon, and it will strike with the anger of an avenging god."
+
+It was a publicly stunt, but it worked. Chatter on the Street was at a dull roar... until an hour ago, when it went nuclear.
+
+Noted activist investor, Ian Cahan, defended the company. He said that not only does he trust their management, he's a long-time client, and thinks their offering is the best in the industry.
+
+"Haters are gonna hate hate hate. Bickman is a gadfly who got lucky once in the 90s and hasn't had an original thought in his entire career. The shorts are depressing the stock of a job-creating American corporation, but hey, it's a free country. I believe in this great country, which is why my fund will continue accumulating FRH. Bickman will have to cover his short before he gallivants off on his next crusade."
+
+Bickman fired back: "I fully intend to cover my short... at zero."
+
+It's on. FearRock Holdings is a quirky duck: it only trades on HappyLaw Vienna Exchange (HLVEX), due to a consent decree they entered with the CES a few years ago. This forces Cahan and Bickman to establish their positions on a lit exchange.
+
+Naturally, they're not the only people with interest in the stock -- regular investors transact in it every day. Market maker interest in FearRock Holdings has cratered, though -- the prospect of two titans dueling it out makes making the market a very, very risky endeavor.
+
+That's great news for us, right? Less competition means we get to charge wider spreads. Only one problem: at any moment, one or the other could send in an order and totally blow us out.
+
+So, umm, don't get blown out. Take account PAM86664545, make the market, and don't die.
+
+Your Goal
+Make $250,000 in profit while minimizing your exposure to FearRock Holdings.
+Cahan and Bickman are going to periodically send in orders, and we assume they'll be massive. Avoid getting crushed.
+You'll Be Fired If
+Excessive risk. Watch out -- taking the other side of a single order from one of the big guys could easily result in the risk desk terminating your position (and you with it).
+Losing money. We're picking up pennies in front of a bulldozer. If at any point you go quite negative, you're doing it wrong -- expect the risk desk to fire you.
+Starfighter Notes
+All corporations and individuals mentioned in this level are works of fiction. They bear no resemblance to any real corporation or person.
+
+What. Stop laughing.
