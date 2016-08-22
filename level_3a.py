@@ -24,9 +24,9 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less likely profit is derived from each trade, but the more likely each bid/ask is to find a counter party (larger than .5...not such a good idea!).
-TRADE_AGGRESSION = .18
+TRADE_AGGRESSION = .2
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .75
+MAX_QUOTE_AGE = 1.25
 #The maximum depth, in either asks or bids, at which the market making algorythm will stop submitting new trades, and cancel any existing open trades.
 MAX_DEPTH = 10000
 
@@ -34,7 +34,7 @@ class MakeMarketCarefully(object):
     '''
     A class designed to execute market-making activity on the stockfighter website in the dueling_bulldozers game (i.e. two hedgefunders having a pissing contest over some equally sketchball company...).
     '''
-    def __init__(self, target=250000, min_trade=20, max_trade=100, owned=0):
+    def __init__(self, target=250000, min_trade=100, max_trade=400, owned=0):
         '''
         INPUT:
         target - The target total value of the account at the end of the task (int)
@@ -45,7 +45,7 @@ class MakeMarketCarefully(object):
         '''
         self.target = target
         self.min_trade = min_trade
-        self.max_trate = max_trade
+        self.max_trade = max_trade
         self.owned = owned
 
     def test(self):
@@ -132,21 +132,16 @@ class MakeMarketCarefully(object):
                             print 'Sending trades.'
 
                             #Deciding how many shares to trade (random inside the range)
-                            trade_size = min(random.randint(self.min_trade, self.max_trade), (self.max_own - abs(self.owned)))
+                            trade_size = random.randint(self.min_trade, self.max_trade)
 
-                            if self.owned < self.max_own:
-                                buy_size = trade_size
-                                if self.owned > (self.max_own * OWNERSHIP_TOLLERANCE):
-                                    buy_size = buy_size * OWNERSHIP_MULTIPLE
-                                buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
-                                buy = self._single_trade(buy_size, 'buy', buy_price, 'immediate-or-cancel')
+                            buy_size = trade_size
+                            buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                            buy = self._single_trade(buy_size, 'buy', buy_price, 'immediate-or-cancel')
 
-                            if self.owned > (-1 * self.max_own):
-                                sell_size = trade_size
-                                if self.owned < (-1 * self.max_own * OWNERSHIP_TOLLERANCE):
-                                    sell_size = sell_size * OWNERSHIP_MULTIPLE
-                                sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
-                                sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
+                            sell_size = trade_size
+                            sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                            sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
+            time.sleep(.5)
         return
 
     def _tabulate_trade_results(self, tradequeue):
@@ -180,6 +175,7 @@ class MakeMarketCarefully(object):
                     self.current_profit = self.cash + self.owned * self.last_share_price
                     print 'Total number of executed trades = {}'.format(str(self.trade_count))
                     print 'Total net current profit = {}'.format(str(self.current_profit))
+                    print 'Number of shares owned: {}.'.format(str(self.owned))
                 time.sleep(.01)
         return
 
@@ -221,7 +217,7 @@ class MakeMarketCarefully(object):
         '''
         return sum([x['qty'] for x in trade['order']['fills'] if x['ts'] not in self.trade_fills[str(trade['order']['id'])]])
 
-    def _launch_tradetape(self, tradetape):
+    def _launch_tradetape(self, tradequeue):
         '''
         INPUT: A Queue object to dump the tradetape information into
         OUTPUT:
@@ -268,7 +264,6 @@ class MakeMarketCarefully(object):
         OUTPUT: Sets the self.venue attribute to the venue where the self.ticker stock is traded
         Queries the stockfighter API to determine on which venue/exchange the stock denoted by the inputed ticker is traded.  Collects a list of all venues, then iterates through and examines the list of stocks on that venue.
         '''
-        print 'Getting venue now.'
         call = requests.get('https://api.stockfighter.io/ob/api/venues', headers=AUTH)
         venues = [d['venue'] for d in call.json()['venues']]
 
