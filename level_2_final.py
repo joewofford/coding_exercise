@@ -23,10 +23,10 @@ PS = 'givepeyton#18'
 PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
-#How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less profit is derived from each trade, but the more likely each bid/ask is to find a counter party.
-TRADE_AGGRESSION = .1
+#How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less likely profit is derived from each trade, but the more likely each bid/ask is to find a counter party (larger than .5...not such a good idea!).
+TRADE_AGGRESSION = .18
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .5
+MAX_QUOTE_AGE = .75
 #Ownership tollerance, the point at which to slow buying/selling as the account approaches maximum long/short position
 OWNERSHIP_TOLLERANCE = .6
 OWNERSHIP_MULTIPLE = .8
@@ -36,7 +36,7 @@ class MakeMarket(object):
     A class designed to execute market-making activity on the stockfighter website in the sell_side game.
     '''
 
-    def __init__(self, target=10000, min_trade=20, max_trade=100, max_own=1000, owned=0):
+    def __init__(self, target=12000, min_trade=20, max_trade=100, max_own=1000, owned=0):
         '''
         INPUT:
         target - The target total value of the account at the end of the task (int)
@@ -98,7 +98,7 @@ class MakeMarket(object):
 
         print 'We have made {}, and currently own {} shares of {}.'.format(str(self.current_profit), str(self.owned), self.ticker)
 
-        pause()
+        self._pause()
 
         return
 
@@ -314,6 +314,10 @@ class MakeMarket(object):
         b_chrome.find_element_by_xpath('//*[@id="loginform"]/button').click()
         time.sleep(10)
         return b_chrome
+
+    def _pause(self):
+        programPause = raw_input("Press the <ENTER> key to continue...")
+
 
 
 if __name__ == '__main__':
