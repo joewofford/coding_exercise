@@ -55,6 +55,27 @@ class MakeMarketCarefully(object):
         self._get_venue()
         return
 
+    def _launch_tickertape(self, tickerqueue):
+        '''
+        INPUT: Queue object to dump the ticker quotes into
+        OUTPUT:
+        Initiates a websocket connection to the stockfighter tickertape for the self.ticker stock on the self.venue exchange.  Recieves the quote objects and stores them in a queue (after deleting the quote currently in the queue).  Thus is designed to maintain the queue with only the most recent quote in it.  It is meant to be run inside a Thread object.
+        '''
+        url = 'wss://api.stockfighter.io/ob/api/ws/{}/venues/{}/tickertape/stocks/{}'.format(self.account, self.venue, self.ticker)
+        print 'Launching tickertape now.'
+        while 1:
+            tick = False
+            try:
+                tick = ws.recv()
+            except:
+                ws = websocket.create_connection(url)
+
+            if tick != False:
+                with tickerqueue.mutex:
+                    tickerqueue.queue.clear()
+                tickerqueue.put(tick)
+        return
+
     def _get_venue(self):
         '''
         INPUT:
