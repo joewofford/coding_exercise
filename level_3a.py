@@ -24,11 +24,11 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less likely profit is derived from each trade, but the more likely each bid/ask is to find a counter party (larger than .5...not such a good idea!).
-TRADE_AGGRESSION = .2
+TRADE_AGGRESSION = .42
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = 1.25
+MAX_QUOTE_AGE = .75
 #The maximum depth, in either asks or bids, at which the market making algorythm will stop submitting new trades, and cancel any existing open trades.
-MAX_DEPTH = 10000
+MAX_DEPTH = 20000
 
 class MakeMarketCarefully(object):
     '''
@@ -118,7 +118,7 @@ class MakeMarketCarefully(object):
                         self.current_profit = self.cash + self.owned * self.last_share_price
 
                     #Checking the quote quality (has all the required fields to trade on it)
-                    if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                    if all(x in quote['quote'] for x in ['bid', 'bidDepth',  'ask', 'askDepth', 'quoteTime']):
 
                         #Strip the time the quote was generated
                         q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0], '%Y-%m-%dT%H:%M:%S')
@@ -128,20 +128,42 @@ class MakeMarketCarefully(object):
                         #Checking to see if the quote isn't too old to trade on
                         if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
                             ask = quote['quote']['ask']
+                            ask_depth = quote['quote']['askDepth']
+
                             bid = quote['quote']['bid']
-                            print 'Sending trades.'
+                            bid_depth = quote['quote']['bidDepth']
+
+                            #print 'Sending trades.'
 
                             #Deciding how many shares to trade (random inside the range)
                             trade_size = random.randint(self.min_trade, self.max_trade)
 
-                            buy_size = trade_size
-                            buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
-                            buy = self._single_trade(buy_size, 'buy', buy_price, 'immediate-or-cancel')
+                            #The following two if statements cover trading when a hedgefund is a buying a large chunk of shares, then the following sales once the large order has cleared
+                            if bid_depth > MAX_DEPTH:
+                                print 'Buying'
+                                buy_size = trade_size
+                                buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                                buy = self._single_trade(buy_size, 'buy', buy_price, 'immediate-or-cancel')
 
-                            sell_size = trade_size
-                            sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
-                            sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
-            time.sleep(.5)
+                            if bid_depth < MAX_DEPTH and self.owned > 0:
+                                print 'Selling'
+                                sell_size = min(trade_size, self.owned)
+                                sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                                sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
+
+                            #The following two if statements cover trading when a hedgefund is selling a large chunk of shares, then the following buying once the large order has cleared
+                            if ask_depth > MAX_DEPTH:
+                                print 'Selling'
+                                sell_size = trade_size
+                                sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                                sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
+
+                            if ask_depth < MAX_DEPTH and self.owned < 0:
+                                print 'Buying'
+                                buy_size = min(trade_size, (-1 * self.owned))
+                                buy_price = int(str(bid + (ask - bid) * TRADE_AGGRESSION).split('.')[0])
+                                buy = self._single_trade(buy_size, 'buy', buy_price, 'immediate-or-cancel')
+            time.sleep(.01)
         return
 
     def _tabulate_trade_results(self, tradequeue):

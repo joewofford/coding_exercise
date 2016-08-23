@@ -24,40 +24,36 @@ PATH_TO_CHROMEDRIVER = '/Users/joewofford/anaconda/chromedriver'
 
 #Parameters related to how the market-making will be executed
 #How deep into the spread we will bid/ask (larger number is deeper into spread).  The deeper into the spread the less likely profit is derived from each trade, but the more likely each bid/ask is to find a counter party (larger than .5...not such a good idea!).
-TRADE_AGGRESSION = .1
+TRADE_AGGRESSION = .42
 #The maximum age, in seconds, of a quote to use its information to initiate a trade
-MAX_QUOTE_AGE = .75
+MAX_QUOTE_AGE = 1
 #Ownership tollerance, the point at which to slow buying/selling as the account approaches maximum long/short position
 OWNERSHIP_TOLLERANCE = .5
 OWNERSHIP_MULTIPLE = .5
+#The maximum depth, in either asks or bids, at which the market making algorythm will stop submitting new trades, and cancel any existing open trades.
+MAX_DEPTH = 15000
 
-class MakeMarket(object):
+class MakeMarketCarefully(object):
     '''
-    A class designed to execute market-making activity on the stockfighter website in the sell_side game.
+    A class designed to execute market-making activity on the stockfighter website in the dueling_bulldozers game (i.e. two hedgefunders having a pissing contest over some equally sketchball company...).
     '''
-
-    def __init__(self, target=12000, min_trade=60, max_trade=100, max_own=1000, owned=0):
+    def __init__(self, target=250000, min_trade=100, max_trade=400, owned=0, max_own=1000):
         '''
         INPUT:
         target - The target total value of the account at the end of the task (int)
         min_trade - The minimum number of shares to include in any trade (int)
         max_trade - The maximum number of shares to include in any trade (int)
-        max_own - The maximum number of shares the account is allowed to hold or short (int)
         owned - The number of shares the account starts with (int)
-        OUTPUT: Instance of the MakeMarket class (object)
+        OUTPUT: Instance of the MakeMarketCarefully class (object)
         '''
         self.target = target
-        self.max_trade = max_trade
         self.min_trade = min_trade
-        self.max_own = max_own
+        self.max_trade = max_trade
         self.owned = owned
+        self.max_own = max_own
 
-    def make_market(self):
-        '''
-        INPUT:
-        OUTPUT:
-        The main method of the class.  First performs the web interfacing to log-in and launch the sell_side game, initiates the tickertape and tradetape, then executes a series of trades (bids near the bottom of the spread, asks near the top) to perform "market-making" until the target value is reached.
-        '''
+    def test(self):
+
         #Initializing various attributes needed for market making
         self.current_profit = 0
         self.last_share_price = 0
@@ -65,12 +61,12 @@ class MakeMarket(object):
         self.trade_count = 0
         self.trade_fills = defaultdict(set)
 
-        #Performing pre-trading setup and parsing
         b_chrome = self._login()
         self._initiate_market(b_chrome)
         self._parse_trade_info(b_chrome)
+        self._get_venue()
 
-        #Launching the tickertape through a websocket, which will communicate the quotes through a queue object
+        #Launching the tickertape through a websocket, which will communicate the quotes through the self.quote_queue attribute
         tickerqueue = Queue.Queue()
         tickertape = threading.Thread(target = self._launch_tickertape, args = (tickerqueue,))
         tickertape.start()
@@ -79,7 +75,7 @@ class MakeMarket(object):
         while tickerqueue.empty():
             time.sleep(1)
 
-        #Launching the tradetape through a websocket, which will communicate executed trades through a queue object
+        #Launching the tradetape through a websocket, which will communicate executed trades through the self.trade_queue attribute
         tradequeue = Queue.Queue()
         tradetape = threading.Thread(target = self._launch_tradetape, args = (tradequeue,))
         tradetape.start()
@@ -87,7 +83,7 @@ class MakeMarket(object):
         #Arbitrary pause to wait for tradetape to launch (can't test without trading)...
         time.sleep(10)
 
-        #Launching the tabulate_trade_results method in a Thread to update the class attributes as each trade confirmation comes over the tradetape
+        #Launching the tabulate_trade_results method in a Thread to update the class attributes as each trade confirmation comes over the tradetame
         tabulatetrades = threading.Thread(target = self._tabulate_trade_results, args = (tradequeue,))
         tabulatetrades.start()
 
@@ -126,7 +122,7 @@ class MakeMarket(object):
                         self.current_profit = self.cash + self.owned * self.last_share_price
 
                     #Checking the quote quality (has all the required fields to trade on it)
-                    if all(x in quote['quote'] for x in ['bid', 'ask', 'quoteTime']):
+                    if all(x in quote['quote'] for x in ['bid', 'bidDepth',  'ask', 'askDepth', 'quoteTime']):
 
                         #Strip the time the quote was generated
                         q_time = datetime.strptime(quote['quote']['quoteTime'].split('.')[0], '%Y-%m-%dT%H:%M:%S')
@@ -136,11 +132,15 @@ class MakeMarket(object):
                         #Checking to see if the quote isn't too old to trade on
                         if (datetime.utcnow() - q_time).total_seconds() < MAX_QUOTE_AGE:
                             ask = quote['quote']['ask']
+                            ask_depth = quote['quote']['askDepth']
+
                             bid = quote['quote']['bid']
+                            bid_depth = quote['quote']['bidDepth']
+
                             #print 'Sending trades.'
 
                             #Deciding how many shares to trade (random inside the range)
-                            trade_size = min(random.randint(self.min_trade, self.max_trade), (self.max_own - abs(self.owned)))
+                            trade_size = random.randint(self.min_trade, self.max_trade)
 
                             if self.owned < self.max_own:
                                 buy_size = trade_size
@@ -157,6 +157,42 @@ class MakeMarket(object):
                                     sell_size = sell_size * OWNERSHIP_MULTIPLE
                                 sell_price = int(str(ask - (ask - bid) * TRADE_AGGRESSION).split('.')[0])
                                 sell = self._single_trade(sell_size, 'sell', sell_price, 'immediate-or-cancel')
+            time.sleep(.01)
+        return
+
+    def _tabulate_trade_results(self, tradequeue):
+        '''
+        INPUT: Queue object containing all of the trade confirmations recieved on the tradeticker stream that have yet to be accounted for
+        OUTPUT:
+        This method is responsible for accounting for the result of each trade sent, both in number of shares bought/sold, as well as their cost, and updated the class attributes accordingly. Is meant to be run inside a Thread object.
+        '''
+        print 'Launching the trade tabulator.'
+        while 1:
+            if not tradequeue.empty():
+                trade = json.loads(tradequeue.get())
+                #print 'Trade pulled from queue.'
+
+                #Checking the 'trade' is actually a trade and not a websocket ping...
+                if all(x in trade for x in ['ok', 'filled']):
+                    #print 'It is a trade.'
+
+                    if trade['order']['direction'] == 'buy':
+                        self.owned = self.owned + self._sum_fills(trade)
+                        self.cash = self.cash - self._sum_trade_value(trade)
+
+                    if trade['order']['direction'] == 'sell':
+                        self.owned = self.owned - self._sum_fills(trade)
+                        self.cash = self.cash + self._sum_trade_value(trade)
+
+                    #Setting each trade_id as a key, with the value as a set of the timestamps
+                    self.trade_fills[str(trade['order']['id'])].update([x['ts'] for x in trade['order']['fills']])
+                    self.trade_count += 1
+
+                    self.current_profit = self.cash + self.owned * self.last_share_price
+                    print 'Total number of executed trades = {}'.format(str(self.trade_count))
+                    print 'Total net current profit = {}'.format(str(self.current_profit))
+                    print 'Number of shares owned: {}.'.format(str(self.owned))
+                time.sleep(.01)
         return
 
     def _single_trade(self, qty, direction, price, order_type):
@@ -196,40 +232,6 @@ class MakeMarket(object):
         Aggregataes all of the fills associated with the trade after checking if each fill has already been account for.
         '''
         return sum([x['qty'] for x in trade['order']['fills'] if x['ts'] not in self.trade_fills[str(trade['order']['id'])]])
-
-    def _tabulate_trade_results(self, tradequeue):
-        '''
-        INPUT: Queue object containing all of the trade confirmations recieved on the tradeticker stream that have yet to be accounted for
-        OUTPUT:
-        This method is responsible for accounting for the result of each trade sent, both in number of shares bought/sold, as well as their cost, and updated the class attributes accordingly. Is meant to be run inside a Thread object.
-        '''
-        print 'Launching the trade tabulator.'
-        while 1:
-            if not tradequeue.empty():
-                trade = json.loads(tradequeue.get())
-                #print 'Trade pulled from queue.'
-
-                #Checking the 'trade' is actually a trade and not a websocket ping...
-                if all(x in trade for x in ['ok', 'filled']):
-                    #print 'It is a trade.'
-
-                    if trade['order']['direction'] == 'buy':
-                        self.owned = self.owned + self._sum_fills(trade)
-                        self.cash = self.cash - self._sum_trade_value(trade)
-
-                    if trade['order']['direction'] == 'sell':
-                        self.owned = self.owned - self._sum_fills(trade)
-                        self.cash = self.cash + self._sum_trade_value(trade)
-
-                    #Setting each trade_id as a key, with the value as a set of the timestamps
-                    self.trade_fills[str(trade['order']['id'])].update([x['ts'] for x in trade['order']['fills']])
-                    self.trade_count += 1
-
-                    self.current_profit = self.cash + self.owned * self.last_share_price
-                    print 'Total number of executed trades = {}'.format(str(self.trade_count))
-                    print 'Total net current profit = {}'.format(str(self.current_profit))
-                time.sleep(.01)
-        return
 
     def _launch_tradetape(self, tradequeue):
         '''
@@ -272,20 +274,42 @@ class MakeMarket(object):
                 tickerqueue.put(tick)
         return
 
+    def _get_venue(self):
+        '''
+        INPUT:
+        OUTPUT: Sets the self.venue attribute to the venue where the self.ticker stock is traded
+        Queries the stockfighter API to determine on which venue/exchange the stock denoted by the inputed ticker is traded.  Collects a list of all venues, then iterates through and examines the list of stocks on that venue.
+        '''
+        call = requests.get('https://api.stockfighter.io/ob/api/venues', headers=AUTH)
+        venues = [d['venue'] for d in call.json()['venues']]
+
+        for venue in venues:
+            if self.ticker in self._get_tickers(venue):
+                self.venue = venue
+        print 'Venue is: {}'.format(self.venue)
+        return
+
+    def _get_tickers(self, venue):
+        '''
+        INPUT: Venue name as a string
+        OUTPUT: List of ticker symbols
+        Queries the stockfighter API to determine stocks traded on the inputted venue/exchange, and returns them as a list of ticker symbols.
+        '''
+        call = requests.get('https://api.stockfighter.io/ob/api/venues/{}/stocks'.format(venue), headers=AUTH)
+
+        if not call.ok:
+            return []
+
+        return [d['symbol'] for d in call.json()['symbols']]
+
     def _parse_trade_info(self, b_chrome):
-        '''
-        INPUT: Selenium webdriver for the chrome browser
-        OUTPUT:
-        Uses the webdriver to parse the opening page of the 'sell_side' game for the account to be traded on (self.account), the exchange where the trades will take place (self.venue), and the stock to be traded (self.ticker).  It then closes the pop-up window.
-        '''
-        self.account = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/strong').text.split()[1]
-        self.venue = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[1]').text
-        self.ticker = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[1]/em[2]').text
-        time.sleep(2)
-        b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[3]/button').click()
-        print 'Account is: {}.'.format(self.account)
+        self.ticker = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[2]/em').text
         print 'Ticker is: {}.'.format(self.ticker)
-        print 'Venue is: {}.'.format(self.venue)
+
+        self.account = b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[2]/span/p[12]/strong').text.split()[1]
+        print 'Account is: {}.'.format(self.account)
+
+        b_chrome.find_element_by_xpath('/html/body/div[3]/div/div[2]/div/div/div[3]/button').click()
         return
 
     def _initiate_market(self, b_chrome):
@@ -296,9 +320,9 @@ class MakeMarket(object):
         '''
         b_chrome.find_element_by_xpath('//*[@id="app"]/div/div/div/div/div[1]/div[2]/ul/li[1]/b/a').click()
         time.sleep(3)
-        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/a/span[1]/span[1]').click()
+        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]').click()
         time.sleep(1)
-        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[3]/a/span[1]/b').click()
+        b_chrome.find_element_by_xpath('//*[@id="wrapping"]/nav/div/ul/li[2]/ul/li[2]/a').click()
         time.sleep(10)
         return
 
@@ -318,9 +342,8 @@ class MakeMarket(object):
         return b_chrome
 
     def _pause(self):
-        programPause = raw_input("Press the <ENTER> key to continue...")
-
+        programPause = raw_input('Press the <ENTER> key to continue...')
 
 if __name__ == '__main__':
-    market = MakeMarket()
-    market.make_market()
+    market = MakeMarketCarefully()
+    market.test()
